@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../auth/screens/face_test_screen.dart';
+import '../../auth/screens/face_registration_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   @override
@@ -7,14 +7,19 @@ class ProfileScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: Text('Profile')),
       body: Center(
-        child: ElevatedButton(
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => FaceTestScreen()),
-            );
-          },
-          child: Text('Test Face Detection'),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => FaceRegistrationScreen()),
+                );
+              },
+              child: Text('Register Face for Payments'),
+            ),
+          ],
         ),
       ),
     );

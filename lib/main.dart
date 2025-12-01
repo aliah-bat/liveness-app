@@ -15,9 +15,9 @@ void main() async {
   // Initialize Supabase
   try {
     await SupabaseService.initialize();
-    print('✅ App initialized successfully');
+    debugPrint('✅ App initialized successfully');
   } catch (e) {
-    print('❌ Failed to initialize app: $e');
+    debugPrint('❌ Failed to initialize app: $e');
   }
 
   runApp(const MyApp());

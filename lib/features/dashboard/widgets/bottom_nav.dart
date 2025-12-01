@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/config/theme.dart';
-import '../../../core/utils/constants.dart';
 import '../../bill/screens/bill_screen.dart';
+import '../../profile/screen/profile_screen.dart';
 
 class CustomBottomNav extends StatelessWidget {
   final int currentIndex;
@@ -53,7 +53,12 @@ class CustomBottomNav extends StatelessWidget {
       }
       break;
     case 2:
-      // Profile - TODO: create profile screen
+      if (currentIndex != 2) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => ProfileScreen()),
+          );
+        }
       break;
   }
 }

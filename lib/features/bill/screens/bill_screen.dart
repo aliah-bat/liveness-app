@@ -5,6 +5,7 @@ import '../../../core/config/theme.dart';
 import '../../../core/utils/helpers.dart';
 import '../services/ocr_service.dart';
 import '../../dashboard/widgets/bottom_nav.dart';
+import '../services/bill_service.dart';
 
 class BillScreen extends StatefulWidget {
   const BillScreen({super.key});
@@ -125,13 +126,23 @@ class _BillScreenState extends State<BillScreen> {
   }
 
   Future<void> _uploadBill() async {
-    if (_extractedData == null) {
-      Helpers.showSnackBar(context, 'Please extract or enter bill data first', isError: true);
-      return;
-    }
+  if (_extractedData == null) {
+    Helpers.showSnackBar(context, 'Please extract or enter bill data first', isError: true);
+    return;
+  }
 
-    // TODO: Save to Supabase
-    Helpers.showSnackBar(context, 'Bill saved! (Database integration coming soon)');
+  try {
+    final billService = BillService(); // Add import at top
+    
+    await billService.createBill(
+      title: _extractedData!['title'],
+      amount: _extractedData!['amount'],
+      dueDate: _extractedData!['dueDate'],
+      imageUrl: _selectedImage?.path, // Optional: upload image to storage later
+      rawText: _extractedData!['rawText'],
+    );
+
+    Helpers.showSnackBar(context, 'Bill saved successfully!');
     
     // Reset form
     setState(() {
@@ -141,7 +152,13 @@ class _BillScreenState extends State<BillScreen> {
       _amountController.clear();
       _selectedDueDate = null;
     });
+    
+    // Navigate back to dashboard
+    Navigator.pop(context);
+  } catch (e) {
+    Helpers.showSnackBar(context, 'Failed to save bill: $e', isError: true);
   }
+}
 
   @override
   Widget build(BuildContext context) {

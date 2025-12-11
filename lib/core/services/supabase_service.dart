@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/app_config.dart';
 
@@ -21,9 +22,9 @@ class SupabaseService {
       );
 
       _client = Supabase.instance.client;
-      print('✅ Supabase initialized');
+      debugPrint('✅ Supabase initialized');
     } catch (e) {
-      print('❌ Supabase initialization error: $e');
+      debugPrint('❌ Supabase initialization error: $e');
       rethrow;
     }
   }

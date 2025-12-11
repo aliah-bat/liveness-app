@@ -4,6 +4,7 @@ import 'package:camera/camera.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/services/aws_rekognition_service.dart';
 
 class FaceVerificationScreen extends StatefulWidget {
   final String billId;
@@ -269,28 +270,31 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
   }
 
   Future<void> _verifyFace(XFile image) async {
-    try {
-      final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId == null) throw Exception('User not logged in');
+  try {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) throw Exception('User not logged in');
 
-      // Get stored face URL
-      final userData = await Supabase.instance.client
-          .from('users')
-          .select('face_image_url')
-          .eq('id', userId)
-          .single();
+    // Get stored face URL
+    final userData = await Supabase.instance.client
+        .from('users')
+        .select('face_image_url')
+        .eq('id', userId)
+        .single();
 
-      final storedFaceUrl = userData['face_image_url'];
-      if (storedFaceUrl == null) {
-        throw Exception('No registered face found');
-      }
+    final storedFaceUrl = userData['face_image_url'];
+    if (storedFaceUrl == null) {
+      throw Exception('No registered face found');
+    }
 
-      // Simple verification: For MVP, just check if face detected in both images
-      // TODO: Implement actual face comparison using embeddings
-      
-      // For now, we'll assume verification passed if liveness checks passed
-      await Future.delayed(Duration(seconds: 1));
+    // Compare faces using AWS Rekognition
+    final awsService = AWSRekognitionService();
+    final isMatch = await awsService.compareFaceWithUrl(
+      sourceImagePath: image.path,
+      targetImageUrl: storedFaceUrl,
+      similarityThreshold: 70.0, // 70% similarity required
+    );
 
+    if (isMatch) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Face verified successfully!')),
@@ -298,16 +302,24 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
         
         Navigator.pop(context, true); // Return success
       }
-    } catch (e) {
-      print('Error verifying face: $e');
+    } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Face verification failed: $e')),
+          SnackBar(content: Text('Face does not match. Please try again or use password.')),
         );
         Navigator.pop(context, false); // Return failure
       }
     }
+  } catch (e) {
+    print('Error verifying face: $e');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Verification failed: $e')),
+      );
+      Navigator.pop(context, false); // Return failure
+    }
   }
+}
 
   String _getCurrentDirection() {
     if (_isVerifying) {

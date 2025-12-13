@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/config/theme.dart';
 import '../../auth/screens/face_registration_screen.dart';
+import '../../dashboard/widgets/bottom_nav.dart';
 import '../widgets/profile_header.dart';
 import '../widgets/profile_menu_item.dart';
 
@@ -45,62 +47,100 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Scaffold(
+        backgroundColor: AppTheme.primaryColor,
+        body: Center(child: CircularProgressIndicator(color: Colors.white)),
+      );
     }
 
     return Scaffold(
-      backgroundColor: Colors.grey[100],
-      appBar: AppBar(
-        title: Text('Profile'),
-        centerTitle: true,
-        elevation: 0,
-      ),
-      body: Column(
-        children: [
-          ProfileHeader(
-            fullName: _fullName ?? 'User',
-            email: _email ?? '',
-          ),
-          SizedBox(height: 16),
-          Container(
-            color: Colors.white,
-            child: Column(
-              children: [
-                ProfileMenuItem(
-                  icon: Icons.person_outline,
-                  title: 'Edit Profile',
-                  onTap: _showEditProfileDialog,
+      backgroundColor: AppTheme.primaryColor,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Text(
+                'Profile',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
                 ),
-                Divider(height: 1),
-                ProfileMenuItem(
-                  icon: Icons.lock_outline,
-                  title: 'Change Password',
-                  onTap: _showChangePasswordDialog,
-                ),
-                Divider(height: 1),
-                ProfileMenuItem(
-                  icon: Icons.face,
-                  title: 'Face ID for Payments',
-                  subtitle: _hasFaceRegistered ? 'Registered' : 'Not registered',
-                  trailing: _hasFaceRegistered
-                      ? Icon(Icons.check_circle, color: Colors.green, size: 24)
-                      : Icon(Icons.chevron_right, color: Colors.grey),
-                  onTap: _registerFace,
-                ),
-                Divider(height: 1),
-                ProfileMenuItem(
-                  icon: Icons.logout,
-                  title: 'Log Out',
-                  iconColor: Colors.red,
-                  titleColor: Colors.red,
-                  trailing: Icon(Icons.exit_to_app, color: Colors.red),
-                  onTap: _handleLogout,
-                ),
-              ],
+              ),
             ),
-          ),
-        ],
+
+            // Main content
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(30),
+                    topRight: Radius.circular(30),
+                  ),
+                ),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      ProfileHeader(
+                        fullName: _fullName ?? 'User',
+                        email: _email ?? '',
+                      ),
+                      SizedBox(height: 24),
+                      
+                      // Menu items in white container
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Column(
+                          children: [
+                            ProfileMenuItem(
+                              icon: Icons.person_outline,
+                              title: 'Edit Profile',
+                              onTap: _showEditProfileDialog,
+                            ),
+                            Divider(height: 1, indent: 60),
+                            ProfileMenuItem(
+                              icon: Icons.lock_outline,
+                              title: 'Change Password',
+                              onTap: _showChangePasswordDialog,
+                            ),
+                            Divider(height: 1, indent: 60),
+                            ProfileMenuItem(
+                              icon: Icons.face,
+                              title: 'Face ID for Payments',
+                              subtitle: _hasFaceRegistered ? 'Registered' : 'Not registered',
+                              trailing: _hasFaceRegistered
+                                  ? Icon(Icons.check_circle, color: Colors.green, size: 24)
+                                  : Icon(Icons.chevron_right, color: Colors.grey),
+                              onTap: _registerFace,
+                            ),
+                            Divider(height: 1, indent: 60),
+                            ProfileMenuItem(
+                              icon: Icons.logout,
+                              title: 'Log Out',
+                              iconColor: Colors.red,
+                              titleColor: Colors.red,
+                              trailing: Icon(Icons.exit_to_app, color: Colors.red),
+                              onTap: _handleLogout,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
+      bottomNavigationBar: CustomBottomNav(currentIndex: 2),
     );
   }
 
@@ -110,20 +150,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text('Edit Profile'),
         content: TextField(
           controller: nameController,
           decoration: InputDecoration(
             labelText: 'Full Name',
-            border: OutlineInputBorder(),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('Cancel'),
+            child: Text('Cancel', style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
             onPressed: () async {
               await _updateUserData('full_name', nameController.text);
               Navigator.pop(context);
@@ -142,6 +187,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text('Change Password'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -151,7 +197,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               obscureText: true,
               decoration: InputDecoration(
                 labelText: 'New Password',
-                border: OutlineInputBorder(),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
             SizedBox(height: 16),
@@ -160,7 +206,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               obscureText: true,
               decoration: InputDecoration(
                 labelText: 'Confirm Password',
-                border: OutlineInputBorder(),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
           ],
@@ -168,9 +214,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('Cancel'),
+            child: Text('Cancel', style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
             onPressed: () async {
               if (newPasswordController.text != confirmPasswordController.text) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -236,6 +286,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _handleLogout() async {
     await _supabase.auth.signOut();
-    Navigator.of(context).pushReplacementNamed('/signin');
+    Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
   }
 }

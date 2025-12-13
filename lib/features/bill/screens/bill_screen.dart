@@ -30,7 +30,7 @@ class _BillScreenState extends State<BillScreen> {
   
   // Shared
   Map<String, dynamic>? _extractedData;
-  bool _isOCRMode = true; // Toggle between OCR and Manual entry
+  bool _isOCRMode = true;
 
   @override
   void dispose() {
@@ -60,34 +60,58 @@ class _BillScreenState extends State<BillScreen> {
     }
   }
 
-  Future<void> _extractData() async {
-    if (_selectedImage == null) {
-      Helpers.showSnackBar(context, 'Please upload a bill image first', isError: true);
-      return;
-    }
-
-    setState(() => _isProcessing = true);
-
+  Future<void> _captureImage() async {
     try {
-      final data = await _ocrService.extractBillData(_selectedImage!.path);
-      
-      setState(() {
-        _extractedData = data;
-        _isProcessing = false;
-      });
+      final XFile? image = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 80,
+      );
 
-      if (mounted) {
-        Helpers.showSnackBar(context, 'Data extracted successfully!');
+      if (image != null) {
+        setState(() {
+          _selectedImage = File(image.path);
+          _extractedData = null;
+        });
       }
     } catch (e) {
-      setState(() => _isProcessing = false);
-      
       if (mounted) {
-        Helpers.showSnackBar(context, 'Failed to extract data: $e', isError: true);
+        Helpers.showSnackBar(context, 'Failed to capture image', isError: true);
       }
     }
   }
 
+  Future<void> _extractData() async {
+  if (_selectedImage == null) {
+    Helpers.showSnackBar(context, 'Please upload a bill image first', isError: true);
+    return;
+  }
+
+  setState(() => _isProcessing = true);
+
+  try {
+    final data = await _ocrService.extractBillData(_selectedImage!.path);
+    
+    setState(() {
+      _extractedData = {
+        'title': data['title'],
+        'amount': data['amount'],
+        'dueDate': data['dueDate'] ?? DateTime.now().add(Duration(days: 30)), // Default to 30 days from now if null
+        'rawText': data['rawText'],
+      };
+      _isProcessing = false;
+    });
+
+    if (mounted) {
+      Helpers.showSnackBar(context, 'Data extracted successfully!');
+    }
+  } catch (e) {
+    setState(() => _isProcessing = false);
+    
+    if (mounted) {
+      Helpers.showSnackBar(context, 'Failed to extract data: $e', isError: true);
+    }
+  }
+}
   Future<void> _selectDueDate() async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -126,39 +150,37 @@ class _BillScreenState extends State<BillScreen> {
   }
 
   Future<void> _uploadBill() async {
-  if (_extractedData == null) {
-    Helpers.showSnackBar(context, 'Please extract or enter bill data first', isError: true);
-    return;
-  }
+    if (_extractedData == null) {
+      Helpers.showSnackBar(context, 'Please extract or enter bill data first', isError: true);
+      return;
+    }
 
-  try {
-    final billService = BillService(); // Add import at top
-    
-    await billService.createBill(
-      title: _extractedData!['title'],
-      amount: _extractedData!['amount'],
-      dueDate: _extractedData!['dueDate'],
-      imageUrl: _selectedImage?.path, // Optional: upload image to storage later
-      rawText: _extractedData!['rawText'],
-    );
+    try {
+      final billService = BillService();
+      
+      await billService.createBill(
+        title: _extractedData!['title'],
+        amount: _extractedData!['amount'],
+        dueDate: _extractedData!['dueDate'],
+        imageUrl: _selectedImage?.path,
+        rawText: _extractedData!['rawText'],
+      );
 
-    Helpers.showSnackBar(context, 'Bill saved successfully!');
-    
-    // Reset form
-    setState(() {
-      _selectedImage = null;
-      _extractedData = null;
-      _titleController.clear();
-      _amountController.clear();
-      _selectedDueDate = null;
-    });
-    
-    // Navigate back to dashboard
-    Navigator.pop(context);
-  } catch (e) {
-    Helpers.showSnackBar(context, 'Failed to save bill: $e', isError: true);
+      Helpers.showSnackBar(context, 'Bill saved successfully!');
+      
+      setState(() {
+        _selectedImage = null;
+        _extractedData = null;
+        _titleController.clear();
+        _amountController.clear();
+        _selectedDueDate = null;
+      });
+      
+      Navigator.pop(context);
+    } catch (e) {
+      Helpers.showSnackBar(context, 'Failed to save bill: $e', isError: true);
+    }
   }
-}
 
   @override
   Widget build(BuildContext context) {
@@ -167,7 +189,6 @@ class _BillScreenState extends State<BillScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Header
             Padding(
               padding: const EdgeInsets.all(20),
               child: Text(
@@ -180,7 +201,6 @@ class _BillScreenState extends State<BillScreen> {
               ),
             ),
 
-            // Main content
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
@@ -202,7 +222,7 @@ class _BillScreenState extends State<BillScreen> {
                             child: _isOCRMode
                                 ? ElevatedButton.icon(
                                     onPressed: () {},
-                                    icon: Icon(Icons.camera_alt),
+                                    icon: Icon(Icons.document_scanner),
                                     label: Text('Bill OCR'),
                                     style: ElevatedButton.styleFrom(
                                       padding: EdgeInsets.symmetric(vertical: 12),
@@ -212,7 +232,7 @@ class _BillScreenState extends State<BillScreen> {
                                     onPressed: () {
                                       setState(() => _isOCRMode = true);
                                     },
-                                    icon: Icon(Icons.camera_alt),
+                                    icon: Icon(Icons.document_scanner),
                                     label: Text('Bill OCR'),
                                     style: OutlinedButton.styleFrom(
                                       padding: EdgeInsets.symmetric(vertical: 12),
@@ -246,12 +266,10 @@ class _BillScreenState extends State<BillScreen> {
 
                       SizedBox(height: 24),
 
-                      // Content based on mode
                       if (_isOCRMode) ..._buildOCRContent() else ..._buildManualContent(),
 
                       SizedBox(height: 24),
 
-                      // Extracted Data section (shared)
                       Text(
                         'Extracted Data',
                         style: TextStyle(
@@ -294,7 +312,6 @@ class _BillScreenState extends State<BillScreen> {
 
                       SizedBox(height: 16),
 
-                      // Upload Bill button
                       SizedBox(
                         height: 50,
                         child: ElevatedButton(
@@ -316,21 +333,47 @@ class _BillScreenState extends State<BillScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: CustomBottomNav(
-  currentIndex: 1,
-),
+      bottomNavigationBar: CustomBottomNav(currentIndex: 1),
     );
   }
 
   List<Widget> _buildOCRContent() {
     return [
-      // Upload section
       Text(
-        'Upload Bill Image',
+        'Upload or Capture Bill Image',
         style: TextStyle(
           fontSize: 16,
           fontWeight: FontWeight.w600,
         ),
+      ),
+
+      SizedBox(height: 12),
+
+      // Camera and Gallery buttons
+      Row(
+        children: [
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: _captureImage,
+              icon: Icon(Icons.camera_alt),
+              label: Text('Camera'),
+              style: ElevatedButton.styleFrom(
+                padding: EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+          SizedBox(width: 12),
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: _pickImage,
+              icon: Icon(Icons.photo_library),
+              label: Text('Gallery'),
+              style: OutlinedButton.styleFrom(
+                padding: EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+        ],
       ),
 
       SizedBox(height: 12),
@@ -380,7 +423,6 @@ class _BillScreenState extends State<BillScreen> {
 
       SizedBox(height: 16),
 
-      // Extract button
       SizedBox(
         height: 50,
         child: ElevatedButton(
@@ -422,7 +464,6 @@ class _BillScreenState extends State<BillScreen> {
         key: _formKey,
         child: Column(
           children: [
-            // Bill Title
             TextFormField(
               controller: _titleController,
               decoration: InputDecoration(
@@ -449,7 +490,6 @@ class _BillScreenState extends State<BillScreen> {
 
             SizedBox(height: 16),
 
-            // Total Amount
             TextFormField(
               controller: _amountController,
               decoration: InputDecoration(
@@ -481,7 +521,6 @@ class _BillScreenState extends State<BillScreen> {
 
             SizedBox(height: 16),
 
-            // Due Date
             GestureDetector(
               onTap: _selectDueDate,
               child: Container(
@@ -511,7 +550,6 @@ class _BillScreenState extends State<BillScreen> {
 
             SizedBox(height: 16),
 
-            // Submit button
             SizedBox(
               width: double.infinity,
               height: 50,

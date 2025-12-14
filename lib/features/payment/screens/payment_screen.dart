@@ -88,24 +88,26 @@ class _PaymentScreenState extends State<PaymentScreen> {
 }
 
   Future<void> _processPayment() async {
+  await Future.delayed(Duration(seconds: 2));
+  
+  final userId = _supabase.auth.currentUser?.id;
+  if (userId != null) {
+    // Insert payment record
+    await _supabase.from('payments').insert({
+      'user_id': userId,
+      'bill_id': widget.billId,
+      'bill_title': widget.billTitle,
+      'amount': widget.billAmount,
+      'payment_date': DateTime.now().toIso8601String(),
+      'status': 'completed',
+    });
 
-    // just simulate payment processing
-    await Future.delayed(Duration(seconds: 2));
-    
-    // Add payment record to Supabase
-    final userId = _supabase.auth.currentUser?.id;
-    if (userId != null) {
-      await _supabase.from('payments').insert({
-        'user_id': userId,
-        
-        'bill_title': widget.billTitle,
-        'amount': widget.billAmount,
-        'payment_date': DateTime.now().toIso8601String(),
-        'status': 'completed',
-      });
-    }
+    // Mark bill as paid
+    await _supabase.from('bills').update({
+      'status': 'paid',
+    }).eq('id', widget.billId);
   }
-
+}
   @override
   Widget build(BuildContext context) {
     return Scaffold(

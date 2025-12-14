@@ -7,9 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/services/aws_rekognition_service.dart';
 
 class FaceVerificationScreen extends StatefulWidget {
-  final String billId;
-
-  const FaceVerificationScreen({Key? key, required this.billId}) : super(key: key);
+  const FaceVerificationScreen({super.key});
 
   @override
   State<FaceVerificationScreen> createState() => _FaceVerificationScreenState();
@@ -33,9 +31,9 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
   bool _isCaptured = false;
   bool _isVerifying = false;
   
-  var frontCamera;
+  late CameraDescription frontCamera;
   XFile? _capturedImage;
-  List<String> _successfulSteps = [];
+  final List<String> _successfulSteps = [];
 
   final orientations = {
     DeviceOrientation.portraitUp: 0,
@@ -61,13 +59,9 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
 
   Future<void> _initializeCamera() async {
     final cameras = await availableCameras();
-    final frontCameras = cameras.firstWhere(
+    frontCamera = cameras.firstWhere(
       (camera) => camera.lensDirection == CameraLensDirection.front,
     );
-
-    setState(() {
-      frontCamera = frontCameras;
-    });
 
     _cameraController = CameraController(
       frontCamera,
@@ -112,7 +106,7 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
         _handleFaceDetection(face);
       }
     } catch (e) {
-      print('Error processing camera image: $e');
+      debugPrint('Error processing camera image: $e');
     }
   }
 
@@ -212,7 +206,9 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
     } else if (Platform.isAndroid) {
       var rotationCompensation =
           orientations[_cameraController!.value.deviceOrientation];
-      if (rotationCompensation == null) return null;
+      if (rotationCompensation == null) {
+        return null;
+      }
       
       if (frontCamera.lensDirection == CameraLensDirection.front) {
         rotationCompensation = (sensorOrientation + rotationCompensation) % 360;
@@ -220,17 +216,23 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
         rotationCompensation =
             (sensorOrientation - rotationCompensation + 360) % 360;
       }
-      rotation = InputImageRotationValue.fromRawValue(rotationCompensation!);
+      rotation = InputImageRotationValue.fromRawValue(rotationCompensation);
     }
     
-    if (rotation == null) return null;
+    if (rotation == null) {
+      return null;
+    }
     
     final format = InputImageFormatValue.fromRawValue(image.format.raw);
     if (format == null ||
         (Platform.isAndroid && format != InputImageFormat.nv21) ||
-        (Platform.isIOS && format != InputImageFormat.bgra8888)) return null;
+        (Platform.isIOS && format != InputImageFormat.bgra8888)) {
+      return null;
+    }
     
-    if (image.planes.length != 1) return null;
+    if (image.planes.length != 1) {
+      return null;
+    }
     final plane = image.planes.first;
     
     return InputImage.fromBytes(
@@ -250,6 +252,9 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
     setState(() => _isVerifying = true);
     
     try {
+      // Stop image stream BEFORE taking picture
+      await _cameraController!.stopImageStream();
+      
       final XFile file = await _cameraController!.takePicture();
       setState(() {
         _isCaptured = true;
@@ -259,7 +264,7 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
       // Verify face
       await _verifyFace(file);
     } catch (e) {
-      print('Error capturing image: $e');
+      debugPrint('Error capturing image: $e');
       setState(() => _isVerifying = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -270,56 +275,64 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
   }
 
   Future<void> _verifyFace(XFile image) async {
-  try {
-    final userId = Supabase.instance.client.auth.currentUser?.id;
-    if (userId == null) throw Exception('User not logged in');
+    try {
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId == null) throw Exception('User not logged in');
 
-    // Get stored face URL
-    final userData = await Supabase.instance.client
-        .from('users')
-        .select('face_image_url')
-        .eq('id', userId)
-        .single();
+      final userData = await Supabase.instance.client
+          .from('users')
+          .select('face_image_url')
+          .eq('id', userId)
+          .single();
 
-    final storedFaceUrl = userData['face_image_url'];
-    if (storedFaceUrl == null) {
-      throw Exception('No registered face found');
-    }
-
-    // Compare faces using AWS Rekognition
-    final awsService = AWSRekognitionService();
-    final isMatch = await awsService.compareFaceWithUrl(
-      sourceImagePath: image.path,
-      targetImageUrl: storedFaceUrl,
-      similarityThreshold: 70.0, // 70% similarity required
-    );
-
-    if (isMatch) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Face verified successfully!')),
-        );
-        
-        Navigator.pop(context, true); // Return success
+      final storedFaceUrl = userData['face_image_url'];
+      if (storedFaceUrl == null) {
+        throw Exception('No registered face found');
       }
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Face does not match. Please try again or use password.')),
-        );
-        Navigator.pop(context, false); // Return failure
+
+      final awsService = AWSRekognitionService();
+      final isMatch = await awsService.compareFaceWithUrl(
+        sourceImagePath: image.path,
+        targetImageUrl: storedFaceUrl,
+        similarityThreshold: 70.0,
+      );
+
+      // Dispose camera BEFORE navigation
+      if (_cameraController != null) {
+        await _cameraController!.dispose();
+        _cameraController = null;
       }
-    }
-  } catch (e) {
-    print('Error verifying face: $e');
-    if (mounted) {
+
+      if (!mounted) return;
+
+      if (isMatch) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Face verified successfully!')),
+        );
+        Navigator.of(context).pop(true);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Face does not match. Please try again.')),
+        );
+        Navigator.of(context).pop(false);
+      }
+    } catch (e) {
+      debugPrint('Error verifying face: $e');
+      
+      // Dispose camera on error
+      if (_cameraController != null) {
+        await _cameraController!.dispose();
+        _cameraController = null;
+      }
+      
+      if (!mounted) return;
+      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Verification failed: $e')),
       );
-      Navigator.pop(context, false); // Return failure
+      Navigator.of(context).pop(false);
     }
   }
-}
 
   String _getCurrentDirection() {
     if (_isVerifying) {
@@ -348,7 +361,9 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
   @override
   void dispose() {
     _faceDetector.close();
-    if (_cameraController != null) _cameraController!.dispose();
+    if (_cameraController != null) {
+      _cameraController!.dispose();
+    }
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -369,13 +384,13 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
   @override
   Widget build(BuildContext context) {
     if (_cameraController == null || !_cameraController!.value.isInitialized) {
-      return Scaffold(
+      return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
       );
     }
 
     return Scaffold(
-      appBar: AppBar(title: Text('Verify Face')),
+      appBar: AppBar(title: const Text('Verify Face')),
       body: Column(
         children: [
           if (_capturedImage != null)
@@ -388,13 +403,13 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
               padding: const EdgeInsets.all(16.0),
               child: Text(
                 _getCurrentDirection(),
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 textAlign: TextAlign.center,
               ),
             ),
           
           if (_capturedImage == null)
-            Container(
+            SizedBox(
               width: 300,
               height: 300,
               child: ClipRRect(
@@ -408,7 +423,7 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
               itemCount: _successfulSteps.length,
               itemBuilder: (context, index) {
                 return ListTile(
-                  leading: Icon(Icons.check_circle, color: Colors.green),
+                  leading: const Icon(Icons.check_circle, color: Colors.green),
                   title: Text(_successfulSteps[index]),
                 );
               },

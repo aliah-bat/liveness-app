@@ -1,13 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../bill/models/bill_model.dart';
-import '../../auth/screens/face_verification_screen.dart';
 import '../../../core/config/theme.dart';
+import '../../../core/utils/helpers.dart';
+import '../../auth/screens/face_verification_screen.dart';
+import 'otp_verification_screen.dart';
 
 class PaymentScreen extends StatefulWidget {
-  final BillModel bill;
+  final String billId;
+  final String billTitle;
+  final double billAmount;
 
-  const PaymentScreen({Key? key, required this.bill}) : super(key: key);
+  const PaymentScreen({
+    super.key,
+    required this.billId,
+    required this.billTitle,
+    required this.billAmount,
+  });
 
   @override
   State<PaymentScreen> createState() => _PaymentScreenState();
@@ -16,221 +24,230 @@ class PaymentScreen extends StatefulWidget {
 class _PaymentScreenState extends State<PaymentScreen> {
   final _supabase = Supabase.instance.client;
   bool _isProcessing = false;
-  bool _hasFaceRegistered = false;
-  bool _isLoading = true;
 
-  @override
-  void initState() {
-    super.initState();
-    _checkFaceRegistration();
-  }
+  Future<void> _handlePayment() async {
+  setState(() => _isProcessing = true);
 
-  Future<void> _checkFaceRegistration() async {
-    try {
-      final userId = _supabase.auth.currentUser?.id;
-      if (userId == null) return;
+  try {
+    // Step 1: Face Verification
+    final faceVerified = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => FaceVerificationScreen()),
+    );
 
-      final data = await _supabase
-          .from('users')
-          .select('face_image_url')
-          .eq('id', userId)
-          .single();
-
-      setState(() {
-        _hasFaceRegistered = data['face_image_url'] != null;
-        _isLoading = false;
-      });
-    } catch (e) {
-      print('Error checking face registration: $e');
-      setState(() => _isLoading = false);
+    if (faceVerified != true) {
+      setState(() => _isProcessing = false);
+      Helpers.showSnackBar(context, 'Face verification failed', isError: true);
+      return;
     }
-  }
 
-  Future<void> _proceedToPayment() async {
-    if (_hasFaceRegistered) {
-      // Use face verification
-      final verified = await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => FaceVerificationScreen(billId: widget.bill.id),
-        ),
-      );
-
-      if (verified == true) {
-        _processPayment();
-      }
-    } else {
-      // Fallback to password
-      _showPasswordDialog();
+    // Step 2: Send OTP
+    final userEmail = _supabase.auth.currentUser?.email;
+    if (userEmail == null) {
+      throw Exception('User email not found');
     }
-  }
 
-  void _showPasswordDialog() {
-    final passwordController = TextEditingController();
+    await _supabase.auth.signInWithOtp(
+      email: userEmail,
+      shouldCreateUser: false,  // Important - only for existing users
+    );
 
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Verify Payment'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Enter your password to confirm payment'),
-            SizedBox(height: 16),
-            TextField(
-              controller: passwordController,
-              obscureText: true,
-              decoration: InputDecoration(
-                labelText: 'Password',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await _verifyPassword(passwordController.text);
-            },
-            child: Text('Verify'),
-          ),
-        ],
+    if (mounted) {
+      Helpers.showSnackBar(context, 'Enter the 6-digit code sent to $userEmail');
+    }
+
+    // Step 3: OTP Verification
+    final otpVerified = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => OTPVerificationScreen(email: userEmail),
       ),
     );
-  }
 
-  Future<void> _verifyPassword(String password) async {
-    try {
-      setState(() => _isProcessing = true);
-
-      final email = _supabase.auth.currentUser?.email;
-      if (email == null) throw Exception('User not found');
-
-      // Verify password by attempting sign in
-      await _supabase.auth.signInWithPassword(
-        email: email,
-        password: password,
-      );
-
-      await _processPayment();
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Incorrect password')),
-      );
+    if (otpVerified != true) {
       setState(() => _isProcessing = false);
+      Helpers.showSnackBar(context, 'OTP verification failed', isError: true);
+      return;
     }
+
+    // Step 4: Process Payment
+    await _processPayment();
+
+    if (mounted) {
+      Helpers.showSnackBar(context, 'Payment successful!');
+      Navigator.pop(context, true);
+    }
+
+  } catch (e) {
+    if (mounted) {
+      Helpers.showSnackBar(context, 'Payment failed: $e', isError: true);
+    }
+  } finally {
+    setState(() => _isProcessing = false);
   }
+}
 
   Future<void> _processPayment() async {
-    try {
-      setState(() => _isProcessing = true);
 
-      // Mark bill as paid
-      await _supabase
-          .from('bills')
-          .update({'status': 'paid'})
-          .eq('id', widget.bill.id);
-
-      setState(() => _isProcessing = false);
-
-      // Show success and go back
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Payment successful!')),
-      );
-
-      Navigator.pop(context, true); // Return true to refresh dashboard
-    } catch (e) {
-      setState(() => _isProcessing = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Payment failed: $e')),
-      );
+    // just simulate payment processing
+    await Future.delayed(Duration(seconds: 2));
+    
+    // Add payment record to Supabase
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId != null) {
+      await _supabase.from('payments').insert({
+        'user_id': userId,
+        
+        'bill_title': widget.billTitle,
+        'amount': widget.billAmount,
+        'payment_date': DateTime.now().toIso8601String(),
+        'status': 'completed',
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Payment'),
-      ),
-      body: Padding(
-        padding: EdgeInsets.all(20),
+      backgroundColor: AppTheme.primaryColor,
+      body: SafeArea(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Bill Details',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 16),
-            Container(
-              padding: EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey[300]!),
-              ),
-              child: Column(
+            // Header
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Row(
                 children: [
-                  _buildRow('Bill', widget.bill.title),
-                  Divider(),
-                  _buildRow('Amount', 'RM ${widget.bill.amount.toStringAsFixed(2)}'),
-                  Divider(),
-                  _buildRow('Due Date', _formatDate(widget.bill.dueDate)),
+                  IconButton(
+                    icon: Icon(Icons.arrow_back, color: Colors.white),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    'Payment',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
                 ],
               ),
             ),
-            SizedBox(height: 24),
-            Text(
-              'Payment Method',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-            SizedBox(height: 12),
-            Text(
-              _hasFaceRegistered 
-                ? 'Face ID verification will be used'
-                : 'Password verification will be used',
-              style: TextStyle(color: Colors.grey[600]),
-            ),
-            Spacer(),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: _isProcessing ? null : _proceedToPayment,
-                child: _isProcessing
-                    ? CircularProgressIndicator(color: Colors.white)
-                    : Text('Proceed to Payment'),
+
+            // Main content
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(30),
+                    topRight: Radius.circular(30),
+                  ),
+                ),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SizedBox(height: 20),
+
+                      // Bill details
+                      Container(
+                        padding: EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Column(
+                          children: [
+                            Text(
+                              widget.billTitle,
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            SizedBox(height: 16),
+                            Text(
+                              'RM ${widget.billAmount.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                fontSize: 36,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.primaryColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      SizedBox(height: 24),
+
+                      // Security info
+                      Container(
+                        padding: EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.blue[50],
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.blue[200]!),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.security, color: Colors.blue),
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'Secured with Face ID + OTP verification',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.blue[900],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      SizedBox(height: 32),
+
+                      // Pay button
+                      SizedBox(
+                        height: 56,
+                        child: ElevatedButton(
+                          onPressed: _isProcessing ? null : _handlePayment,
+                          child: _isProcessing
+                              ? SizedBox(
+                                  height: 24,
+                                  width: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  ),
+                                )
+                              : Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.lock),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      'Pay Now',
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ],
         ),
       ),
     );
-  }
-
-  Widget _buildRow(String label, String value) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label, style: TextStyle(color: Colors.grey[600])),
-        Text(value, style: TextStyle(fontWeight: FontWeight.w600)),
-      ],
-    );
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
   }
 }

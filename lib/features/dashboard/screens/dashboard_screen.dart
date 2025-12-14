@@ -289,7 +289,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 final result = await Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => PaymentScreen(bill: bill),
+                    builder: (_) => PaymentScreen(
+                      billId: bill.id,
+                      billTitle: bill.title,
+                      billAmount: bill.amount,
+                    ),
                   ),
                 );
                 

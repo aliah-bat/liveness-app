@@ -1,307 +1,355 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../../../core/config/theme.dart';
-import '../../../core/utils/constants.dart';
-import '../../../core/utils/helpers.dart';
-import '../../auth/providers/auth_provider.dart';
 import '../../bill/models/bill_model.dart';
-import '../../bill/models/mock_bill_model.dart';
+import '../../bill/services/bill_service.dart';
 import '../widgets/bottom_nav.dart';
+import '../../payment/screens/payment_screen.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
   @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  final BillService _billService = BillService();
+  
+  List<BillModel> _pendingBills = [];
+  List<BillModel> _paymentHistory = [];
+  double _totalPending = 0.0;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBills();
+  }
+
+  Future<void> _loadBills() async {
+    setState(() => _isLoading = true);
+    
+    try {
+      final pending = await _billService.getPendingBills();
+      final history = await _billService.getPaymentHistory();
+      final total = await _billService.getTotalPending();
+      
+      setState(() {
+        _pendingBills = pending;
+        _paymentHistory = history;
+        _totalPending = total;
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Error loading bills: $e');
+      setState(() => _isLoading = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final authProvider = Provider.of<AuthProvider>(context);
-    final user = authProvider.user;
-    final pendingBills = MockBills.getPendingBills();
-    final paymentHistory = MockBills.getPaymentHistory();
-    final totalPending = MockBills.getTotalPending();
+    if (_isLoading) {
+      return Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+        bottomNavigationBar: CustomBottomNav(currentIndex: 0),
+      );
+    }
 
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: AppTheme.primaryColor,
       body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              Container(
-                padding: const EdgeInsets.all(20),
-                color: Colors.white,
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 24,
-                      backgroundColor: AppTheme.primaryColor,
-                      child: Text(
-                        user?.name?.substring(0, 1).toUpperCase() ?? 'U',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
+        child: RefreshIndicator(
+          onRefresh: _loadBills,
+          child: SingleChildScrollView(
+            physics: AlwaysScrollableScrollPhysics(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Dashboard',
+                        style: TextStyle(
+                          fontSize: 28,
                           fontWeight: FontWeight.bold,
+                          color: Colors.white,
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      'Hi ${user?.name ?? 'User'},',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.menu),
-                      onPressed: () => _showMenu(context, authProvider),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // Total Pending Balance Card
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 10,
-                        offset: const Offset(0, 2),
+                      SizedBox(height: 8),
+                      Text(
+                        'Manage your bills',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.white70,
+                        ),
                       ),
                     ],
+                  ),
+                ),
+
+                // Total Pending Card
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Container(
+                    width: double.infinity,
+                    padding: EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Total Pending',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          'RM ${_totalPending.toStringAsFixed(2)}',
+                          style: TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.primaryColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                SizedBox(height: 24),
+
+                // Content Container
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(30),
+                      topRight: Radius.circular(30),
+                    ),
                   ),
                   child: Column(
                     children: [
-                      const Text(
-                        'Your Total Pending Balance',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey,
+                      // Pending Bills Section
+                      Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Pending Bills',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: () {},
+                                  child: Text('View all'),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 12),
+                            _pendingBills.isEmpty
+                                ? _buildEmptyState('No pending bills')
+                                : Column(
+                                    children: _pendingBills.take(2).map((bill) {
+                                      return Padding(
+                                        padding: const EdgeInsets.only(bottom: 12),
+                                        child: _buildBillCard(bill, isPending: true),
+                                      );
+                                    }).toList(),
+                                  ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'RM ${totalPending.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
+
+                      // Payment History Section
+                      Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Payment History',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: () {},
+                                  child: Text('View all'),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 12),
+                            _paymentHistory.isEmpty
+                                ? _buildEmptyState('No payment history')
+                                : Column(
+                                    children: _paymentHistory.take(3).map((bill) {
+                                      return Padding(
+                                        padding: const EdgeInsets.only(bottom: 8),
+                                        child: _buildHistoryItem(bill),
+                                      );
+                                    }).toList(),
+                                  ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                 ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // Pending Bills Section
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Pending Bills',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () {},
-                      child: const Text('View all'),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              // Pending Bills List
-              SizedBox(
-                height: 200,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  itemCount: pendingBills.length,
-                  itemBuilder: (context, index) {
-                    final bill = pendingBills[index];
-                    return _buildBillCard(context, bill, isPending: true);
-                  },
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // Payment History Section
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Payment History',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () {},
-                      child: const Text('View all'),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              // Payment History List
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 20),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  children: paymentHistory.map((bill) {
-                    return _buildHistoryItem(bill);
-                  }).toList(),
-                ),
-              ),
-
-              const SizedBox(height: 20),
-            ],
+              ],
+            ),
           ),
         ),
       ),
-      bottomNavigationBar: CustomBottomNav(
-  currentIndex: 0,
-),
+      bottomNavigationBar: CustomBottomNav(currentIndex: 0),
     );
   }
 
-  Widget _buildBillCard(BuildContext context, BillModel bill, {required bool isPending}) {
+  Widget _buildEmptyState(String message) {
     return Container(
-      width: 200,
-      margin: const EdgeInsets.only(right: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+      padding: EdgeInsets.all(32),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                bill.title,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Total Bill',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'RM ${bill.amount.toStringAsFixed(2)}',
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Due Date: ${bill.dueDate.day} ${_getMonthName(bill.dueDate.month)} ${bill.dueDate.year}',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey,
-                ),
-              ),
-            ],
+          Icon(Icons.receipt_long, size: 64, color: Colors.grey[400]),
+          SizedBox(height: 16),
+          Text(
+            message,
+            style: TextStyle(color: Colors.grey[600], fontSize: 16),
           ),
-          if (isPending)
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {
-                  Helpers.showSnackBar(context, 'Payment feature coming soon!');
-                },
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-                child: const Text('Pay Now'),
-              ),
-            ),
         ],
       ),
     );
   }
+
+  Widget _buildBillCard(BillModel bill, {required bool isPending}) {
+  return Container(
+    padding: EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          bill.title,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        SizedBox(height: 4),
+        Text(
+          'Total Bill',
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey[600],
+          ),
+        ),
+        SizedBox(height: 4),
+        Text(
+          'RM ${bill.amount.toStringAsFixed(2)}',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: AppTheme.primaryColor,
+          ),
+        ),
+        SizedBox(height: 8),
+        Text(
+          'Due Date: ${_formatDate(bill.dueDate)}',
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey[600],
+          ),
+        ),
+        if (isPending) ...[
+          SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () async {
+                // Navigate to payment screen
+                final result = await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => PaymentScreen(
+                      billId: bill.id,
+                      billTitle: bill.title,
+                      billAmount: bill.amount,
+                    ),
+                  ),
+                );
+                
+                // Refresh if payment was successful
+                if (result == true) {
+                  _loadBills();
+                }
+              },
+              child: Text('Pay Now'),
+            ),
+          ),
+        ],
+      ],
+    ),
+  );
+}
 
   Widget _buildHistoryItem(BillModel bill) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+    final isPaid = bill.status == 'paid';
+    
+    return Container(
+      padding: EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+      ),
       child: Row(
         children: [
           Container(
-            width: 40,
-            height: 40,
+            padding: EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: bill.isPaid ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
+              color: isPaid ? Colors.green[50] : Colors.red[50],
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
-              bill.isPaid ? Icons.check : Icons.close,
-              color: bill.isPaid ? Colors.green : Colors.red,
+              isPaid ? Icons.check : Icons.close,
+              color: isPaid ? Colors.green : Colors.red,
             ),
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   bill.title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(height: 2),
                 Text(
-                  '${bill.dueDate.day} ${_getMonthName(bill.dueDate.month)} ${bill.dueDate.year}',
-                  style: const TextStyle(
+                  _formatDate(bill.dueDate),
+                  style: TextStyle(
                     fontSize: 12,
-                    color: Colors.grey,
+                    color: Colors.grey[600],
                   ),
                 ),
               ],
@@ -309,14 +357,18 @@ class DashboardScreen extends StatelessWidget {
           ),
           Text(
             'RM ${bill.amount.toStringAsFixed(2)}',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.bold,
             ),
           ),
         ],
       ),
     );
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day} ${_getMonthName(date.month)} ${date.year}';
   }
 
   String _getMonthName(int month) {
@@ -325,41 +377,5 @@ class DashboardScreen extends StatelessWidget {
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
     ];
     return months[month - 1];
-  }
-
-  void _showMenu(BuildContext context, AuthProvider authProvider) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.logout),
-              title: const Text('Sign Out'),
-              onTap: () async {
-                Navigator.pop(context);
-                final confirm = await Helpers.showConfirmDialog(
-                  context,
-                  'Sign Out',
-                  'Are you sure you want to sign out?',
-                  confirmText: 'Sign Out',
-                );
-
-                if (confirm && context.mounted) {
-                  await authProvider.signOut();
-                  Navigator.pushNamedAndRemoveUntil(
-                    context,
-                    AppConstants.signInRoute,
-                    (route) => false,
-                  );
-                }
-              },
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }

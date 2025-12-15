@@ -1,5 +1,4 @@
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
-import 'dart:io';
 
 class FaceDetectionService {
   late FaceDetector _faceDetector;

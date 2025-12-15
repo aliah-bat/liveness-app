@@ -1,10 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'app.dart';
 import 'core/services/supabase_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Load .env file FIRST
+  try {
+    await dotenv.load(fileName: ".env");
+    debugPrint('✅ .env file loaded successfully');
+  } catch (e) {
+    debugPrint('❌ Failed to load .env file: $e');
+  }
 
   // Set portrait orientation only
   await SystemChrome.setPreferredOrientations([

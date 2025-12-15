@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/config/theme.dart';
-import '../../bill/screens/bill_screen.dart';
-import '../../profile/screen/profile_screen.dart';
+import '../../../core/config/routes.dart';
 
 class CustomBottomNav extends StatelessWidget {
   final int currentIndex;
@@ -18,48 +17,26 @@ class CustomBottomNav extends StatelessWidget {
       selectedItemColor: AppTheme.primaryColor,
       onTap: (index) => _handleNavigation(context, index),
       items: const [
-        BottomNavigationBarItem(
-          icon: Icon(Icons.home),
-          label: 'Home',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.receipt_long),
-          label: 'Bills',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.person),
-          label: 'Profile',
-        ),
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+        BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: 'Bills'),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
       ],
     );
   }
 
   void _handleNavigation(BuildContext context, int index) {
-  // Remove this line that blocks navigation
-  // if (index == currentIndex) return;
+    if (index == currentIndex) return;
 
-  switch (index) {
-    case 0:
-      // Home - pop back to dashboard
-      Navigator.of(context).popUntil((route) => route.isFirst);
-      break;
-    case 1:
-      // Bills - only push if not already on bills screen
-      if (currentIndex != 1) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const BillScreen()),
-        );
-      }
-      break;
-    case 2:
-      if (currentIndex != 2) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => ProfileScreen()),
-          );
-        }
-      break;
+    switch (index) {
+      case 0:
+        Navigator.pushNamedAndRemoveUntil(context, AppRoutes.dashboard, (route) => false);
+        break;
+      case 1:
+        Navigator.pushNamedAndRemoveUntil(context, AppRoutes.bills, (route) => route.settings.name == AppRoutes.dashboard);
+        break;
+      case 2:
+        Navigator.pushNamedAndRemoveUntil(context, AppRoutes.profile, (route) => route.settings.name == AppRoutes.dashboard);
+        break;
+    }
   }
-}
 }

@@ -1,11 +1,16 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
-import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart' as mlkit;
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:aws_rekognition_api/rekognition-2016-06-27.dart' as aws;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class FaceRegistrationScreen extends StatefulWidget {
+  const FaceRegistrationScreen({Key? key}) : super(key: key);
+
   @override
   State<FaceRegistrationScreen> createState() => _FaceRegistrationScreenState();
 }
@@ -14,7 +19,7 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen>
     with WidgetsBindingObserver {
   
   CameraController? _cameraController;
-  late FaceDetector _faceDetector;
+  late mlkit.FaceDetector _faceDetector;
   
   // Liveness check states
   bool _isFaceInFrame = false;
@@ -27,9 +32,9 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen>
   bool _isMultiFace = false;
   bool _isCaptured = false;
   
-  var frontCamera;
+  CameraDescription? frontCamera;
   XFile? _capturedImage;
-  List<String> _successfulSteps = [];
+  final List<String> _successfulSteps = [];
 
   final orientations = {
     DeviceOrientation.portraitUp: 0,
@@ -44,13 +49,13 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen>
     WidgetsBinding.instance.addObserver(this);
     _initializeCamera();
     
-    final options = FaceDetectorOptions(
+    final options = mlkit.FaceDetectorOptions(
       enableContours: true,
       enableClassification: true,
       enableLandmarks: true,
       enableTracking: true,
     );
-    _faceDetector = FaceDetector(options: options);
+    _faceDetector = mlkit.FaceDetector(options: options);
   }
 
   Future<void> _initializeCamera() async {
@@ -64,7 +69,7 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen>
     });
 
     _cameraController = CameraController(
-      frontCamera,
+      frontCamera!,
       ResolutionPreset.medium,
       imageFormatGroup: Platform.isAndroid
           ? ImageFormatGroup.nv21
@@ -85,7 +90,7 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen>
       final inputImage = _getInputImageFromCameraImage(img);
       if (inputImage == null) return;
 
-      final List<Face> faces = await _faceDetector.processImage(inputImage);
+      final List<mlkit.Face> faces = await _faceDetector.processImage(inputImage);
 
       if (faces.length > 1) {
         setState(() {
@@ -102,15 +107,15 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen>
       } else if (faces.isNotEmpty) {
         _isMultiFace = false;
         _isNoFace = false;
-        final Face face = faces.first;
+        final mlkit.Face face = faces.first;
         _handleFaceDetection(face);
       }
     } catch (e) {
-      print('Error processing camera image: $e');
+      debugPrint('Error processing camera image: $e');
     }
   }
 
-  void _handleFaceDetection(Face face) {
+  void _handleFaceDetection(mlkit.Face face) {
     if (!_isCaptured) {
       final double? rotY = face.headEulerAngleY;
       final double leftEyeOpen = face.leftEyeOpenProbability ?? -1.0;
@@ -197,38 +202,39 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen>
     }
   }
 
-  InputImage? _getInputImageFromCameraImage(CameraImage image) {
-    final sensorOrientation = frontCamera.sensorOrientation;
-    InputImageRotation? rotation;
+  mlkit.InputImage? _getInputImageFromCameraImage(CameraImage image) {
+    final sensorOrientation = frontCamera!.sensorOrientation;
+    mlkit.InputImageRotation? rotation;
     
     if (Platform.isIOS) {
-      rotation = InputImageRotationValue.fromRawValue(sensorOrientation);
+      rotation = mlkit.InputImageRotationValue.fromRawValue(sensorOrientation);
     } else if (Platform.isAndroid) {
       var rotationCompensation =
           orientations[_cameraController!.value.deviceOrientation];
       if (rotationCompensation == null) return null;
       
-      if (frontCamera.lensDirection == CameraLensDirection.front) {
+      if (frontCamera!.lensDirection == CameraLensDirection.front) {
         rotationCompensation = (sensorOrientation + rotationCompensation) % 360;
       } else {
         rotationCompensation =
             (sensorOrientation - rotationCompensation + 360) % 360;
       }
-rotation = InputImageRotationValue.fromRawValue(rotationCompensation!);    }
+      rotation = mlkit.InputImageRotationValue.fromRawValue(rotationCompensation);
+    }
     
     if (rotation == null) return null;
     
-    final format = InputImageFormatValue.fromRawValue(image.format.raw);
+    final format = mlkit.InputImageFormatValue.fromRawValue(image.format.raw);
     if (format == null ||
-        (Platform.isAndroid && format != InputImageFormat.nv21) ||
-        (Platform.isIOS && format != InputImageFormat.bgra8888)) return null;
+        (Platform.isAndroid && format != mlkit.InputImageFormat.nv21) ||
+        (Platform.isIOS && format != mlkit.InputImageFormat.bgra8888)) return null;
     
     if (image.planes.length != 1) return null;
     final plane = image.planes.first;
     
-    return InputImage.fromBytes(
+    return mlkit.InputImage.fromBytes(
       bytes: plane.bytes,
-      metadata: InputImageMetadata(
+      metadata: mlkit.InputImageMetadata(
         size: Size(image.width.toDouble(), image.height.toDouble()),
         rotation: rotation,
         format: format,
@@ -250,7 +256,8 @@ rotation = InputImageRotationValue.fromRawValue(rotationCompensation!);    }
       // Upload to Supabase
       await _uploadFaceToSupabase(file);
     } catch (e) {
-      print('Error capturing image: $e');
+      debugPrint('Error capturing image: $e');
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to capture image: $e')),
       );
@@ -262,32 +269,39 @@ rotation = InputImageRotationValue.fromRawValue(rotationCompensation!);    }
       final userId = Supabase.instance.client.auth.currentUser?.id;
       if (userId == null) throw Exception('User not logged in');
 
-      // Upload image to storage
       final bytes = await File(image.path).readAsBytes();
-      final fileName = '$userId-face.jpg';
       
-      await Supabase.instance.client.storage
-          .from('face-images')
-          .uploadBinary(fileName, bytes);
-
-      // Get public URL
-      final imageUrl = Supabase.instance.client.storage
-          .from('face-images')
-          .getPublicUrl(fileName);
-
-      // Store URL in users table
-      await Supabase.instance.client
-          .from('users')
-          .update({'face_image_url': imageUrl})
-          .eq('id', userId);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Face registered successfully!')),
+      final rekognition = aws.Rekognition(
+        region: 'ap-southeast-1',
+        credentials: aws.AwsClientCredentials(
+          accessKey: dotenv.env['AWS_ACCESS_KEY']!,
+          secretKey: dotenv.env['AWS_SECRET_KEY']!,
+        ),
       );
       
+      final response = await rekognition.indexFaces(
+        collectionId: 'billpay-faces',
+        image: aws.Image(bytes: Uint8List.fromList(bytes)),
+        externalImageId: userId,
+      );
+      
+      final faceId = response.faceRecords?.first.face?.faceId;
+      
+      await Supabase.instance.client
+          .from('users')
+          .update({'aws_face_id': faceId})
+          .eq('id', userId);
+      
+      await File(image.path).delete();
+      
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Face registered successfully!')),
+      );
       Navigator.pop(context);
     } catch (e) {
-      print('Error uploading to Supabase: $e');
+      debugPrint('Error uploading to Supabase: $e');
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to upload: $e')),
       );
@@ -340,13 +354,13 @@ rotation = InputImageRotationValue.fromRawValue(rotationCompensation!);    }
   @override
   Widget build(BuildContext context) {
     if (_cameraController == null || !_cameraController!.value.isInitialized) {
-      return Scaffold(
+      return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
       );
     }
 
     return Scaffold(
-      appBar: AppBar(title: Text('Register Face')),
+      appBar: AppBar(title: const Text('Register Face')),
       body: Column(
         children: [
           if (_capturedImage != null)
@@ -359,13 +373,13 @@ rotation = InputImageRotationValue.fromRawValue(rotationCompensation!);    }
               padding: const EdgeInsets.all(16.0),
               child: Text(
                 _getCurrentDirection(),
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 textAlign: TextAlign.center,
               ),
             ),
           
           if (_capturedImage == null)
-            Container(
+            SizedBox(
               width: 300,
               height: 300,
               child: ClipRRect(
@@ -379,7 +393,7 @@ rotation = InputImageRotationValue.fromRawValue(rotationCompensation!);    }
               itemCount: _successfulSteps.length,
               itemBuilder: (context, index) {
                 return ListTile(
-                  leading: Icon(Icons.check_circle, color: Colors.green),
+                  leading: const Icon(Icons.check_circle, color: Colors.green),
                   title: Text(_successfulSteps[index]),
                 );
               },

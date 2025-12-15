@@ -4,6 +4,8 @@ import '../services/face_detection_service.dart';
 import 'dart:io';
 
 class FaceTestScreen extends StatefulWidget {
+  const FaceTestScreen({super.key});
+
   @override
   State<FaceTestScreen> createState() => _FaceTestScreenState();
 }

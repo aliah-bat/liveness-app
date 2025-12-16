@@ -86,6 +86,17 @@ class AuthService {
     }
   }
 
+  Future<void> resetPassword(String email) async {
+  try {
+    await _supabase.auth.resetPasswordForEmail(
+      email,
+      redirectTo: 'billpay://reset-password',
+    );
+  } catch (e) {
+    throw Exception('Failed to send reset email: ${e.toString()}');
+  }
+}
+
   // Get user profile
   Future<UserModel?> getUserProfile() async {
     try {

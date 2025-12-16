@@ -4,6 +4,7 @@ class AppConstants {
   static const String signInRoute = '/sign-in';
   static const String otpRoute = '/otp';
   static const String dashboardRoute = '/dashboard';
+  static const String forgotPasswordRoute = '/forgot-password';
 
   // Validation
   static const int minPasswordLength = 8;

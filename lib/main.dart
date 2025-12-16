@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'app.dart';
 import 'core/services/supabase_service.dart';
-
+import 'core/services/aws_rekognition_service.dart'; 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -27,6 +27,15 @@ void main() async {
     debugPrint('✅ App initialized successfully');
   } catch (e) {
     debugPrint('❌ Failed to initialize app: $e');
+  }
+
+  // Create AWS Rekognition collection (run once)
+  try {
+    final awsService = AWSRekognitionService();
+    await awsService.createCollection('billpay');
+    debugPrint('✅ AWS Rekognition collection created');
+  } catch (e) {
+    debugPrint('⚠️ AWS collection might already exist: $e');
   }
 
   runApp(const MyApp());

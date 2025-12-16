@@ -275,64 +275,66 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
   }
 
   Future<void> _verifyFace(XFile image) async {
-    try {
-      final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId == null) throw Exception('User not logged in');
+  try {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) throw Exception('User not logged in');
 
-      final userData = await Supabase.instance.client
-          .from('users')
-          .select('face_image_url')
-          .eq('id', userId)
-          .single();
+    final userData = await Supabase.instance.client
+        .from('users')
+        .select('face_id')
+        .eq('id', userId)
+        .single();
 
-      final storedFaceUrl = userData['face_image_url'];
-      if (storedFaceUrl == null) {
-        throw Exception('No registered face found');
-      }
+    final storedFaceId = userData['face_id'];
+    if (storedFaceId == null) {
+      throw Exception('No registered face found');
+    }
 
-      final awsService = AWSRekognitionService();
-      final isMatch = await awsService.compareFaceWithUrl(
-        sourceImagePath: image.path,
-        targetImageUrl: storedFaceUrl,
-        similarityThreshold: 70.0,
-      );
+    final awsService = AWSRekognitionService();
+    const collectionId = 'billpay';
 
-      // Dispose camera BEFORE navigation
-      if (_cameraController != null) {
-        await _cameraController!.dispose();
-        _cameraController = null;
-      }
+    // Search face in AWS collection
+    final isMatch = await awsService.searchFaceByImage(
+      imagePath: image.path,
+      collectionId: collectionId,
+      similarityThreshold: 90.0,
+    );
 
-      if (!mounted) return;
+    // Dispose camera BEFORE navigation
+    if (_cameraController != null) {
+      await _cameraController!.dispose();
+      _cameraController = null;
+    }
 
-      if (isMatch) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Face verified successfully!')),
-        );
-        Navigator.of(context).pop(true);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Face does not match. Please try again.')),
-        );
-        Navigator.of(context).pop(false);
-      }
-    } catch (e) {
-      debugPrint('Error verifying face: $e');
-      
-      // Dispose camera on error
-      if (_cameraController != null) {
-        await _cameraController!.dispose();
-        _cameraController = null;
-      }
-      
-      if (!mounted) return;
-      
+    if (!mounted) return;
+
+    if (isMatch) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Verification failed: $e')),
+        const SnackBar(content: Text('Face verified successfully!')),
+      );
+      Navigator.of(context).pop(true);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Face does not match. Please try again.')),
       );
       Navigator.of(context).pop(false);
     }
+  } catch (e) {
+    debugPrint('Error verifying face: $e');
+    
+    if (_cameraController != null) {
+      await _cameraController!.dispose();
+      _cameraController = null;
+    }
+    
+    if (!mounted) return;
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Verification failed: $e')),
+    );
+    Navigator.of(context).pop(false);
   }
+}
 
   String _getCurrentDirection() {
     if (_isVerifying) {

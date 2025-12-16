@@ -4,6 +4,7 @@ import 'package:camera/camera.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/services/aws_rekognition_service.dart';
 
 class FaceRegistrationScreen extends StatefulWidget {
   @override
@@ -258,41 +259,37 @@ rotation = InputImageRotationValue.fromRawValue(rotationCompensation!);    }
   }
 
   Future<void> _uploadFaceToSupabase(XFile image) async {
-    try {
-      final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId == null) throw Exception('User not logged in');
+  try {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) throw Exception('User not logged in');
 
-      // Upload image to storage
-      final bytes = await File(image.path).readAsBytes();
-      final fileName = '$userId-face.jpg';
-      
-      await Supabase.instance.client.storage
-          .from('face-images')
-          .uploadBinary(fileName, bytes);
+    final awsService = AWSRekognitionService();
+    const collectionId = 'billpay'; // Your collection name
 
-      // Get public URL
-      final imageUrl = Supabase.instance.client.storage
-          .from('face-images')
-          .getPublicUrl(fileName);
+    // Index face in AWS Rekognition
+    final faceId = await awsService.indexFace(
+      imagePath: image.path,
+      collectionId: collectionId,
+    );
 
-      // Store URL in users table
-      await Supabase.instance.client
-          .from('users')
-          .update({'face_image_url': imageUrl})
-          .eq('id', userId);
+    // Store only FaceId in database
+    await Supabase.instance.client
+        .from('users')
+        .update({'face_id': faceId})
+        .eq('id', userId);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Face registered successfully!')),
-      );
-      
-      Navigator.pop(context);
-    } catch (e) {
-      print('Error uploading to Supabase: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to upload: $e')),
-      );
-    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Face registered securely!')),
+    );
+    
+    Navigator.pop(context);
+  } catch (e) {
+    print('Error registering face: $e');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Failed to register: $e')),
+    );
   }
+}
 
   String _getCurrentDirection() {
     if (!_isFaceInFrame) {

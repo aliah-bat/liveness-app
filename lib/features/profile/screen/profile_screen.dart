@@ -5,6 +5,8 @@ import '../../auth/screens/face_registration_screen.dart';
 import '../../dashboard/widgets/bottom_nav.dart';
 import '../widgets/profile_header.dart';
 import '../widgets/profile_menu_item.dart';
+import '../../auth/screens/sign_in_screen.dart';
+
 
 class ProfileScreen extends StatefulWidget {
   @override
@@ -285,7 +287,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _handleLogout() async {
-    await _supabase.auth.signOut();
-    Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
-  }
+  await _supabase.auth.signOut();
+  Navigator.of(context).pushAndRemoveUntil(
+    MaterialPageRoute(builder: (_) => SignInScreen()),
+    (route) => false,
+  );
+}
 }

@@ -4,6 +4,7 @@ import '../../../core/config/theme.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/utils/helpers.dart';
+import '../../../core/config/routes.dart';
 import '../providers/auth_provider.dart';
 
 class SignInScreen extends StatefulWidget {
@@ -147,8 +148,19 @@ class _SignInScreenState extends State<SignInScreen> {
                           ),
                   ),
                 ),
+                const SizedBox(height: 16),
 
-                const SizedBox(height: 24),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () {
+                      Navigator.pushNamed(context, AppRoutes.forgotPassword);
+                    },
+                    child: const Text('Forgot Password?'),
+                  ),
+                ),
+
+                const SizedBox(height: 8), 
 
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,

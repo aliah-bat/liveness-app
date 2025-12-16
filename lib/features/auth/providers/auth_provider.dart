@@ -100,6 +100,25 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> resetPassword(String email) async {
+  try {
+    _status = AuthStatus.loading;
+    _errorMessage = null;
+    notifyListeners();
+
+    await _authService.resetPassword(email);
+    
+    _status = AuthStatus.unauthenticated;
+    notifyListeners();
+    return true;
+  } catch (e) {
+    _errorMessage = e.toString().replaceAll('Exception: ', '');
+    _status = AuthStatus.unauthenticated;
+    notifyListeners();
+    return false;
+  }
+}
+
   // Sign out
   Future<void> signOut() async {
     try {

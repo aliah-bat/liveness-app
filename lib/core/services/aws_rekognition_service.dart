@@ -82,4 +82,94 @@ class AWSRekognitionService {
       return false;
     }
   }
+
+  // Add to AWSRekognitionService class
+
+// Index face and get FaceId
+Future<String> indexFace({
+  required String imagePath,
+  required String collectionId,
+}) async {
+  try {
+    final imageBytes = await File(imagePath).readAsBytes();
+
+    final response = await _rekognition.indexFaces(
+      collectionId: collectionId,
+      image: aws.Image(bytes: Uint8List.fromList(imageBytes)),
+      maxFaces: 1,
+      qualityFilter: aws.QualityFilter.auto,
+      detectionAttributes: [aws.Attribute.all],
+    );
+
+    if (response.faceRecords != null && response.faceRecords!.isNotEmpty) {
+      final faceId = response.faceRecords!.first.face?.faceId;
+      if (faceId != null) {
+        debugPrint('Face indexed successfully. FaceId: $faceId');
+        return faceId;
+      }
+    }
+
+    throw Exception('No face detected in image');
+  } catch (e) {
+    debugPrint('Error indexing face: $e');
+    rethrow;
+  }
+}
+
+// Search face by image
+Future<bool> searchFaceByImage({
+  required String imagePath,
+  required String collectionId,
+  double similarityThreshold = 90.0,
+}) async {
+  try {
+    final imageBytes = await File(imagePath).readAsBytes();
+
+    final response = await _rekognition.searchFacesByImage(
+      collectionId: collectionId,
+      image: aws.Image(bytes: Uint8List.fromList(imageBytes)),
+      faceMatchThreshold: similarityThreshold,
+      maxFaces: 1,
+    );
+
+    if (response.faceMatches != null && response.faceMatches!.isNotEmpty) {
+      final similarity = response.faceMatches!.first.similarity ?? 0;
+      debugPrint('Face match found. Similarity: $similarity%');
+      return similarity >= similarityThreshold;
+    }
+
+    debugPrint('No matching face found');
+    return false;
+  } catch (e) {
+    debugPrint('Error searching face: $e');
+    return false;
+  }
+}
+
+// Delete face from collection
+Future<void> deleteFace({
+  required String collectionId,
+  required String faceId,
+}) async {
+  try {
+    await _rekognition.deleteFaces(
+      collectionId: collectionId,
+      faceIds: [faceId],
+    );
+    debugPrint('Face deleted successfully. FaceId: $faceId');
+  } catch (e) {
+    debugPrint('Error deleting face: $e');
+    rethrow;
+  }
+}
+
+// Create collection (run once during setup)
+Future<void> createCollection(String collectionId) async {
+  try {
+    await _rekognition.createCollection(collectionId: collectionId);
+    debugPrint('Collection created: $collectionId');
+  } catch (e) {
+    debugPrint('Error creating collection: $e');
+  }
+}
 }

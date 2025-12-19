@@ -176,7 +176,7 @@ class _BillScreenState extends State<BillScreen> {
         _selectedDueDate = null;
       });
       
-      Navigator.pop(context);
+      Navigator.pushReplacementNamed(context, '/dashboard');
     } catch (e) {
       Helpers.showSnackBar(context, 'Failed to save bill: $e', isError: true);
     }

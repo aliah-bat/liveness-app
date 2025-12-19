@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:async';
 import '../../../core/config/theme.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/validators.dart';
@@ -20,40 +21,92 @@ class _SignInScreenState extends State<SignInScreen> {
   final _passwordController = TextEditingController();
 
   bool _obscurePassword = true;
+  
+  // Lockout mechanism
+  int _failedAttempts = 0;
+  bool _isLockedOut = false;
+  int _lockoutSeconds = 0;
+  Timer? _lockoutTimer;
+  
+  static const int _maxAttempts = 3;
+  static const int _lockoutDuration = 300;
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _lockoutTimer?.cancel();
     super.dispose();
   }
 
-  Future<void> _handleSignIn() async {
-  if (!_formKey.currentState!.validate()) return;
+  void _startLockoutTimer() {
+    setState(() {
+      _isLockedOut = true;
+      _lockoutSeconds = _lockoutDuration;
+    });
 
-  Helpers.hideKeyboard(context);
+    _lockoutTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      setState(() {
+        _lockoutSeconds--;
+      });
 
-  final authProvider = Provider.of<AuthProvider>(context, listen: false);
-
-  // Use password sign in directly (no OTP)
-  final success = await authProvider.signIn(
-    email: _emailController.text.trim(),
-    password: _passwordController.text,
-  );
-
-  if (!mounted) return;
-
-  if (success) {
-    Helpers.showSnackBar(context, AppConstants.signInSuccess);
-    Navigator.pushReplacementNamed(context, AppConstants.dashboardRoute);
-  } else {
-    Helpers.showSnackBar(
-      context,
-      authProvider.errorMessage ?? AppConstants.authError,
-      isError: true,
-    );
+      if (_lockoutSeconds <= 0) {
+        timer.cancel();
+        setState(() {
+          _isLockedOut = false;
+          _failedAttempts = 0;
+        });
+      }
+    });
   }
-}
+
+  Future<void> _handleSignIn() async {
+    if (_isLockedOut) {
+      Helpers.showSnackBar(
+        context,
+        'Account locked. Wait $_lockoutSeconds seconds.',
+        isError: true,
+      );
+      return;
+    }
+
+    if (!_formKey.currentState!.validate()) return;
+
+    Helpers.hideKeyboard(context);
+
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+    final success = await authProvider.signIn(
+      email: _emailController.text.trim(),
+      password: _passwordController.text,
+    );
+
+    if (!mounted) return;
+
+    if (success) {
+      _failedAttempts = 0;
+      Helpers.showSnackBar(context, AppConstants.signInSuccess);
+      Navigator.pushReplacementNamed(context, AppConstants.dashboardRoute);
+    } else {
+      _failedAttempts++;
+      
+      if (_failedAttempts >= _maxAttempts) {
+        _startLockoutTimer();
+        Helpers.showSnackBar(
+          context,
+          'Too many failed attempts. Locked for $_lockoutDuration seconds.',
+          isError: true,
+        );
+      } else {
+        int remaining = _maxAttempts - _failedAttempts;
+        Helpers.showSnackBar(
+          context,
+          '${authProvider.errorMessage ?? AppConstants.authError}. $remaining attempt(s) left.',
+          isError: true,
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -92,8 +145,33 @@ class _SignInScreenState extends State<SignInScreen> {
 
                 const SizedBox(height: 60),
 
+                // Lockout warning banner
+                if (_isLockedOut)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.red[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.red[300]!),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.lock_clock, color: Colors.red[700]),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Account locked. Try again in $_lockoutSeconds seconds.',
+                            style: TextStyle(color: Colors.red[700]),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
                 TextFormField(
                   controller: _emailController,
+                  enabled: !_isLockedOut,
                   decoration: const InputDecoration(
                     labelText: 'Email',
                     prefixIcon: Icon(Icons.email_outlined),
@@ -107,6 +185,7 @@ class _SignInScreenState extends State<SignInScreen> {
 
                 TextFormField(
                   controller: _passwordController,
+                  enabled: !_isLockedOut,
                   decoration: InputDecoration(
                     labelText: 'Password',
                     prefixIcon: const Icon(Icons.lock_outline),
@@ -132,7 +211,7 @@ class _SignInScreenState extends State<SignInScreen> {
                 SizedBox(
                   height: 50,
                   child: ElevatedButton(
-                    onPressed: isLoading ? null : _handleSignIn,
+                    onPressed: (isLoading || _isLockedOut) ? null : _handleSignIn,
                     child: isLoading
                         ? const SizedBox(
                             height: 20,
@@ -142,25 +221,26 @@ class _SignInScreenState extends State<SignInScreen> {
                               valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                             ),
                           )
-                        : const Text(
-                            'Sign In',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                        : Text(
+                            _isLockedOut ? 'Locked ($_lockoutSeconds s)' : 'Sign In',
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                           ),
                   ),
                 ),
+
                 const SizedBox(height: 16),
 
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
-                    onPressed: () {
+                    onPressed: _isLockedOut ? null : () {
                       Navigator.pushNamed(context, AppRoutes.forgotPassword);
                     },
                     child: const Text('Forgot Password?'),
                   ),
                 ),
 
-                const SizedBox(height: 8), 
+                const SizedBox(height: 8),
 
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,

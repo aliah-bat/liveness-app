@@ -230,7 +230,7 @@ class _SignInScreenState extends State<SignInScreen> {
 
                 const SizedBox(height: 16),
 
-                Align(
+                /* Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
                     onPressed: _isLockedOut ? null : () {
@@ -238,7 +238,7 @@ class _SignInScreenState extends State<SignInScreen> {
                     },
                     child: const Text('Forgot Password?'),
                   ),
-                ),
+                ),*/
 
                 const SizedBox(height: 8),
 

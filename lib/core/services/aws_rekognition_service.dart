@@ -20,7 +20,7 @@ class AWSRekognitionService {
   Future<bool> compareFaces({
     required String sourceImagePath,
     required String targetImagePath,
-    double similarityThreshold = 70.0,
+    double similarityThreshold = 90.0,
   }) async {
     try {
       final sourceBytes = await File(sourceImagePath).readAsBytes();
